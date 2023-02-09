@@ -104,3 +104,56 @@ ENGINE = InnoDB;
 SET SQL_MODE=@OLD_SQL_MODE;
 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
+
+
+-- -----------------------------------------------------
+-- Inserts, Functions and Triggers
+-- -----------------------------------------------------
+
+use iflyrics;
+
+insert into permissions values (default, 'Admin');
+insert into permissions values (default, 'Common User');
+
+drop trigger tr_checkAdmin;
+
+# Trigger para verificar permissão
+# Só quem tem permission_id = 1 (Por ventura só que é um administrador) pode adicionar um novo artista
+
+delimiter $$
+	create trigger tr_checkAdmin before insert on artists
+	for each row
+	begin
+			set @permission = (select permissions.id from users join permissions on permissions.id = users.permission_id where users.id = new.user_id);
+            
+            if @permission != 1 then
+				signal sqlstate '45000' set message_text = 'Não foi possível efetuar essa operação pois o seu usuário não é administrador!';
+            end if;
+	end $$
+delimiter ;
+
+# Function para listar informações de um artista
+# Passa-se o id de um artista e a função vai retornar um texto formatado mostrando os dados relacionados a ele
+
+drop function fn_artistToString;
+
+delimiter $$
+	create function fn_artistToString(artistId int) returns varchar(1000)
+    deterministic
+    begin
+		set @artist = (select name from artists where artists.id = artistId);
+        set @startDate = (select start_date from artists where artists.id = artistId);
+        set @dateAux = replace(@startDate, '-', '/');
+        set @musicsCount = (select count(artist_id) from artist_music where artist_music.artist_id = artistId);
+        
+        set @message = (select concat('Nome: ', @artist, '\nData que iniciou a carreira: ', fn_dateFormat(@dateAux), '\nMúsicas cadastradas no site: ', @musicsCount));
+		return @message;
+    end $$
+delimiter ;
+
+# Função auxiliar para formatar data
+
+drop function fn_dateFormat;
+
+create function fn_dateFormat(dateAux varchar(12)) returns varchar(12)
+	deterministic return concat(substring_index(@dateAux, '/', -1), '/', substring_index(substring_index(@dateAux, '/', 2), '/', -1), '/', substring_index(@dateAux, '/', 1));
